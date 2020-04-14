@@ -242,6 +242,42 @@ SKIPPED VERSION 11 - Fastmail internal only
 # Set up header and record formatting information {{{
 
 my $VersionFormats = {
+  6 => {
+    HeaderSize => 76,
+    _make_fields('Header',<<EOF),
+Generation            int32  4
+Format                int32  4
+MinorVersion          int32  4
+StartOffset           int32  4
+RecordSize            int32  4
+Exists                int32  4
+LastAppenddate        time_t 4
+LastUid               int32  4
+QuotaUsed             int64  8
+Pop3LastLogin         time_t 4
+UidValidity           int32  4
+Deleted               int32  4
+Answered              int32  4
+Flagged               int32  4
+Options               bitmap 4
+LeakedCache           int32  4
+EOF
+    RecordSize => 60, # defined in file too, check it!
+    _make_fields('Record', <<EOF),
+Uid                   int32  4
+InternalDate          time_t 4
+SentDate              time_t 4
+Size                  int32  4
+HeaderSize            int32  4
+ContentOffset         int32  4
+CacheOffset           int32  4
+LastUpdated           time_t 4
+SystemFlags           bitmap 4
+UserFlags             bitmap 16
+ContentLines          int32  4
+CacheVersion          int32  4
+EOF
+  },
   9 => {
     HeaderSize => 96,
     _make_fields('Header',<<EOF),
@@ -552,7 +588,7 @@ sub _make_pack {
 
 =item Cyrus::IndexFile->new($fh)
 
-Build a new Cyrus::IndexFile object from a filehandle.  The handle is not 
+Build a new Cyrus::IndexFile object from a filehandle.  The handle is not
 required to be seekable, so make sure you have rewound it before use.
 
  seek($fh, 0, 0);
@@ -561,7 +597,7 @@ required to be seekable, so make sure you have rewound it before use.
 This function reads the header from the file and returns a Cyrus::IndexFile
 object.  The filehandle will be pointing at the start of the first record.
 
-If there is a problem, then the position of the filehandle is undefined 
+If there is a problem, then the position of the filehandle is undefined
 (though probably either at 12 bytes or the end of the header) and the
 function will "die".
 
@@ -580,7 +616,7 @@ sub new {
 
   # read initial header information to determine version
   my $read = sysread($handle, $buf, 12);
-  die "Unable to read header information\n" 
+  die "Unable to read header information\n"
     unless $read == 12;
 
   # version is always at this offset!
@@ -592,9 +628,9 @@ sub new {
 
   # read the rest of the header (length depends on version)
   sysread($handle, $buf, $frm->{HeaderSize} - 12, 12);
-  my $Self = bless { 
+  my $Self = bless {
     @_,
-    version => $version, 
+    version => $version,
     handle => $handle,
     format => $frm,
     rawheader => $buf,
@@ -630,7 +666,7 @@ sub new_file {
     $fh = IO::File::fcntl->new($filename, '+<', @$lockopts)
           || die "Can't open $filename for locked read: $!";
   } else {
-    $fh = IO::File->new("< $filename") 
+    $fh = IO::File->new("< $filename")
           || die "Can't open $filename for read: $!";
   }
 
@@ -650,10 +686,10 @@ sub new_empty {
   my $version = shift;
 
   # check that the version is supported
-  my $frm = $VersionFormats->{$version} 
+  my $frm = $VersionFormats->{$version}
     || die "unknown version $version";
 
-  my $Self = bless { 
+  my $Self = bless {
     @_,
     version => $version,
     format => $frm,
@@ -772,7 +808,7 @@ sub header_copy {
 
 =item $index->reset($num)
 
-Deletes the cached 'current record' and seeks back to the given record 
+Deletes the cached 'current record' and seeks back to the given record
 number, or the end of the header (record 0) if no number given.
 
 Requires the input filehandle to be seekable.
@@ -783,7 +819,7 @@ sub reset {
   my $Self = shift;
   my $num = shift || 0;
 
-  my $NumRecords = $Self->{header}{MinorVersion} < 12 ? 
+  my $NumRecords = $Self->{header}{MinorVersion} < 12 ?
 		   $Self->{header}{Exists} : $Self->{header}{NumRecords};
 
   die "Invalid record $num (must be >= 0 and <= $NumRecords"
@@ -791,7 +827,7 @@ sub reset {
 
   my $HeaderSize = $Self->{format}{HeaderSize};
   my $RecordSize = $Self->{format}{RecordSize};
-  
+
   sysseek($Self->{handle}, $HeaderSize + ($num * $RecordSize), 0)
     || die "unable to seek on this filehandle";
 
@@ -851,7 +887,7 @@ sub next_record_raw {
   delete $Self->{checksum_failure};
 
   # use direct access for speed
-  my $NumRecords = $Self->{header}{MinorVersion} < 12 ? 
+  my $NumRecords = $Self->{header}{MinorVersion} < 12 ?
 		   $Self->{header}{Exists} : $Self->{header}{NumRecords};
   my $RecordSize = $Self->{header}{RecordSize};
 
@@ -980,7 +1016,7 @@ sub record_raw {
 
 =item $index->field_number($Field)
 
-Return the field number in a record array for the named field, or die 
+Return the field number in a record array for the named field, or die
 if there isn't one.
 
 =cut
@@ -1022,8 +1058,8 @@ Also seeks back to the header and rewrites it with exists incremented by one.
 sub append_record {
   my $Self = shift;
   my $record = shift;
-  
-  my $NumRecords = $Self->{header}{MinorVersion} < 12 ? 
+
+  my $NumRecords = $Self->{header}{MinorVersion} < 12 ?
 		   $Self->{header}{Exists} : $Self->{header}{NumRecords};
 
   $Self->reset($NumRecords);
@@ -1163,9 +1199,9 @@ sub merge_indexes {
 
 =item $index->record_undump()
 
-Dump the headers and records in either space separated fields or named lines with a blank line between for long.  
+Dump the headers and records in either space separated fields or named lines with a blank line between for long.
 
-The "undump" option is able to parse the space separated format, allowing pipe to a standard unix tool to 
+The "undump" option is able to parse the space separated format, allowing pipe to a standard unix tool to
 process the records, and then re-parse them back into a binary index file.
 
 =cut
